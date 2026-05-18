@@ -1,0 +1,65 @@
+name: eventhub
+description: Egypt Event Discovery Platform
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Networking
+  dio: ^5.7.0
+  retrofit: ^4.4.2
+
+  # Storage
+  shared_preferences: ^2.4.0
+  flutter_secure_storage: ^9.2.4
+
+  # Navigation
+  go_router: ^14.8.1
+
+  # UI
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  flutter_svg: ^2.0.17
+  intl: ^0.20.2
+
+  # QR
+  mobile_scanner: ^6.0.5
+  qr_flutter: ^4.1.0
+
+  # Payments
+  webview_flutter: ^4.10.0
+
+  # Utils
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+  fluttertoast: ^8.2.10
+  url_launcher: ^6.3.1
+  timeago: ^3.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.14
+  freezed: ^2.5.8
+  json_serializable: ^6.9.4
+  riverpod_generator: ^2.6.3
+  retrofit_generator: ^9.1.9
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/fonts/

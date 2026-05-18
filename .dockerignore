@@ -1,0 +1,11 @@
+.git
+.gitignore
+node_modules
+vendor
+.storage
+.env
+docs
+mobile
+*.md
+*.pdf
+.DS_Store

@@ -1,0 +1,85 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: eventhub-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - backend_public:/var/www/public:ro
+      - backend_storage:/var/www/storage:ro
+    depends_on:
+      - backend
+      - web
+    restart: unless-stopped
+    networks:
+      - eventhub
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/backend.Dockerfile
+    container_name: eventhub-api
+    env_file:
+      - backend/.env
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - DB_HOST=mysql
+      - DB_DATABASE=eventhub
+      - DB_USERNAME=eventhub
+      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+      - SANCTUM_STATEFUL_DOMAINS=${APP_DOMAIN:-localhost}
+      - APP_URL=https://${APP_DOMAIN:-localhost}
+      - SESSION_DRIVER=file
+    volumes:
+      - backend_storage:/app/storage
+      - backend_public:/app/public
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - eventhub
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    container_name: eventhub-web
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://${APP_DOMAIN:-localhost}/api
+      - NEXT_TELEMETRY_DISABLED=1
+    restart: unless-stopped
+    networks:
+      - eventhub
+
+  mysql:
+    image: mysql:8.0
+    container_name: eventhub-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: eventhub
+      MYSQL_USER: eventhub
+      MYSQL_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - eventhub
+
+volumes:
+  mysql_data:
+  backend_storage:
+  backend_public:
+
+networks:
+  eventhub:
+    driver: bridge
