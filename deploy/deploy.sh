@@ -14,20 +14,18 @@ err()   { echo -e "${RED}[ERROR]${NC} $1"; }
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-# ── 1. Check prerequisites ────────────────────────────────────────────────────
+# ── 1. Prerequisites ──────────────────────────────────────────────────────────
 info "Checking prerequisites..."
 
-command -v docker >/dev/null 2>&1 || { err "Docker is not installed. Install it first."; exit 1; }
-command -v docker-compose >/dev/null 2>&1 || docker compose version >/dev/null 2>&1 || { err "Docker Compose is not installed."; exit 1; }
-
+command -v docker >/dev/null 2>&1 || { err "Docker is not installed."; exit 1; }
 DOCKER_COMPOSE="docker-compose"
 if docker compose version >/dev/null 2>&1; then
   DOCKER_COMPOSE="docker compose"
 fi
 
-ok "Docker & Docker Compose are available"
+ok "Docker and Docker Compose are available"
 
-# ── 2. Setup production environment ────────────────────────────────────────────
+# ── 2. Environment setup ──────────────────────────────────────────────────────
 if [ ! -f backend/.env ]; then
   info "Creating backend/.env from template..."
   cp backend/.env.example backend/.env
@@ -37,99 +35,94 @@ if [ ! -f backend/.env ]; then
   else
     sed -i "s/APP_KEY=/APP_KEY=$APP_KEY/" backend/.env
   fi
-  ok "Generated APP_KEY and created .env"
+  ok "Generated APP_KEY"
 fi
 
-# Prompt for domain
 read -rp "Enter your domain (e.g., eventhub.example.com): " APP_DOMAIN
 if [ -z "$APP_DOMAIN" ]; then
-  warn "No domain set. Will use localhost. Configure APP_DOMAIN later."
+  warn "No domain set. Using localhost."
   APP_DOMAIN="localhost"
 fi
 
-# Prompt for DB password
-read -rsp "Enter MySQL password for 'eventhub' user: " DB_PASSWORD
+read -rsp "Enter MariaDB password for 'eventhub' user: " DB_PASSWORD
 echo ""
-if [ -z "$DB_PASSWORD" ]; then
-  DB_PASSWORD="changeme"
-  warn "Using default DB password! Change it immediately."
-fi
+[ -z "$DB_PASSWORD" ] && DB_PASSWORD="changeme" && warn "Using default DB password!"
 
-read -rsp "Enter MySQL root password: " DB_ROOT_PASSWORD
+read -rsp "Enter MariaDB root password: " DB_ROOT_PASSWORD
 echo ""
-if [ -z "$DB_ROOT_PASSWORD" ]; then
-  DB_ROOT_PASSWORD="rootpass"
-  warn "Using default root password! Change it immediately."
-fi
+[ -z "$DB_ROOT_PASSWORD" ] && DB_ROOT_PASSWORD="rootpass" && warn "Using default root password!"
 
-# Update .env with production values
+read -rsp "Enter Redis password: " REDIS_PASSWORD
+echo ""
+[ -z "$REDIS_PASSWORD" ] && REDIS_PASSWORD="redispass" && warn "Using default Redis password!"
+
+# Write .env
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  sed -i '' "s/APP_URL=http:\/\/localhost:8000/APP_URL=https:\/\/$APP_DOMAIN/" backend/.env
-  sed -i '' "s/DB_HOST=.*/DB_HOST=mysql/" backend/.env
-  sed -i '' "s/DB_USERNAME=.*/DB_USERNAME=eventhub/" backend/.env
+  sed -i '' "s/APP_URL=.*/APP_URL=https:\/\/$APP_DOMAIN/" backend/.env
+  sed -i '' "s/DB_HOST=.*/DB_HOST=mariadb/" backend/.env
   sed -i '' "s/DB_PASSWORD=.*/DB_PASSWORD=$DB_PASSWORD/" backend/.env
   sed -i '' "s/APP_ENV=.*/APP_ENV=production/" backend/.env
   sed -i '' "s/APP_DEBUG=true/APP_DEBUG=false/" backend/.env
+  sed -i '' "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=$REDIS_PASSWORD/" backend/.env
   sed -i '' "s/SANCTUM_STATEFUL_DOMAINS=.*/SANCTUM_STATEFUL_DOMAINS=$APP_DOMAIN/" backend/.env
 else
-  sed -i "s/APP_URL=http:\/\/localhost:8000/APP_URL=https:\/\/$APP_DOMAIN/" backend/.env
-  sed -i "s/DB_HOST=.*/DB_HOST=mysql/" backend/.env
-  sed -i "s/DB_USERNAME=.*/DB_USERNAME=eventhub/" backend/.env
+  sed -i "s/APP_URL=.*/APP_URL=https:\/\/$APP_DOMAIN/" backend/.env
+  sed -i "s/DB_HOST=.*/DB_HOST=mariadb/" backend/.env
   sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=$DB_PASSWORD/" backend/.env
   sed -i "s/APP_ENV=.*/APP_ENV=production/" backend/.env
   sed -i "s/APP_DEBUG=true/APP_DEBUG=false/" backend/.env
+  sed -i "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=$REDIS_PASSWORD/" backend/.env
   sed -i "s/SANCTUM_STATEFUL_DOMAINS=.*/SANCTUM_STATEFUL_DOMAINS=$APP_DOMAIN/" backend/.env
 fi
 
-export APP_DOMAIN DB_PASSWORD DB_ROOT_PASSWORD
+export APP_DOMAIN DB_PASSWORD DB_ROOT_PASSWORD REDIS_PASSWORD
 
-# ── 3. Pull images & build ────────────────────────────────────────────────────
+# ── 3. Build & start ──────────────────────────────────────────────────────────
 info "Building and starting containers..."
 $DOCKER_COMPOSE up --build -d
 
 ok "Containers are running"
 
-# ── 4. Run migrations & seeders ────────────────────────────────────────────────
-info "Waiting for MySQL to be ready..."
-sleep 10
+# ── 4. Migrations ─────────────────────────────────────────────────────────────
+info "Waiting for MariaDB..."
+sleep 8
 
 info "Running database migrations..."
 $DOCKER_COMPOSE exec -T backend php artisan migrate --seed --no-interaction --force
 
 ok "Migrations complete"
 
-# ── 5. Create storage symlink ──────────────────────────────────────────────────
-info "Creating storage symlink..."
+# ── 5. Storage link ───────────────────────────────────────────────────────────
 $DOCKER_COMPOSE exec -T backend php artisan storage:link --force
-
 ok "Storage linked"
 
-# ── 6. Create admin user (optional) ────────────────────────────────────────────
-info "Creating admin user..."
+# ── 6. Admin seed ─────────────────────────────────────────────────────────────
 $DOCKER_COMPOSE exec -T backend php artisan db:seed --class=AdminUserSeeder --force 2>/dev/null || true
+ok "Admin seeded"
 
-ok "Admin seeded (if seeder exists)"
-
-# ── 7. Summary ─────────────────────────────────────────────────────────────────
+# ── 7. Summary ────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}══════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Deployment complete!${NC}"
+echo -e "${GREEN}  EventHub deployed!${NC}"
 echo -e "${GREEN}══════════════════════════════════════════════${NC}"
 echo ""
-echo "  Frontend : http://$APP_DOMAIN"
-echo "  API      : http://$APP_DOMAIN/api"
+echo "  Frontend : https://$APP_DOMAIN"
+echo "  API      : https://$APP_DOMAIN/api"
 echo ""
-echo "  Useful commands:"
-echo "    View logs : $DOCKER_COMPOSE logs -f"
-echo "    Restart   : $DOCKER_COMPOSE restart"
-echo "    Stop      : $DOCKER_COMPOSE down"
-echo "    Update    : git pull && $DOCKER_COMPOSE up --build -d"
+echo "  Services:"
+echo "    MariaDB  : localhost:3306"
+echo "    Redis    : localhost:6379"
+echo "    OPcache  : enabled (128MB)"
 echo ""
-echo -e "${YELLOW}  Next steps:${NC}"
-echo "  1. Set up DNS A record pointing to your Droplet IP"
-echo "  2. Configure SSL with:"
-echo "     $DOCKER_COMPOSE exec nginx apk add certbot certbot-nginx"
-echo "     $DOCKER_COMPOSE exec nginx certbot --nginx -d $APP_DOMAIN"
-echo "  3. Update PAYMOB/FAWRY/FCM keys in backend/.env and restart:"
-echo "     $DOCKER_COMPOSE restart backend"
+echo "  Commands:"
+echo "    Logs  : $DOCKER_COMPOSE logs -f"
+echo "    Build : $DOCKER_COMPOSE up --build -d"
+echo "    Stop  : $DOCKER_COMPOSE down"
+echo ""
+echo -e "${YELLOW}  Next:${NC}"
+echo "  1. DNS A record -> Droplet IP"
+echo "  2. SSL: apt install certbot python3-certbot-nginx"
+echo "         certbot --nginx -d $APP_DOMAIN"
+echo "  3. Add PAYMOB/FAWRY/FCM/MAIL keys in backend/.env"
+echo "     then: $DOCKER_COMPOSE restart backend"
 echo ""

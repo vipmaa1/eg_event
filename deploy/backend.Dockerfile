@@ -7,9 +7,35 @@ RUN apk add --no-cache \
     libzip-dev \
     libpng-dev \
     oniguruma-dev \
-    && docker-php-ext-install pdo_mysql zip gd bcmath
+    $PHPIZE_DEPS \
+    && docker-php-ext-install pdo_mysql zip gd bcmath opcache \
+    && pecl install redis \
+    && docker-php-ext-enable redis
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# OPcache production config
+RUN { \
+    echo 'opcache.memory_consumption=128'; \
+    echo 'opcache.interned_strings_buffer=8'; \
+    echo 'opcache.max_accelerated_files=10000'; \
+    echo 'opcache.revalidate_freq=60'; \
+    echo 'opcache.fast_shutdown=1'; \
+    echo 'opcache.enable_cli=1'; \
+    echo 'opcache.validate_timestamps=0'; \
+    echo 'realpath_cache_size=4096K'; \
+    echo 'realpath_cache_ttl=600'; \
+} > /usr/local/etc/php/conf.d/opcache.ini
+
+# PHP production tuning
+RUN { \
+    echo 'expose_php=Off'; \
+    echo 'max_execution_time=120'; \
+    echo 'memory_limit=256M'; \
+    echo 'upload_max_filesize=20M'; \
+    echo 'post_max_size=20M'; \
+    echo 'date.timezone=Africa/Cairo'; \
+} > /usr/local/etc/php/conf.d/eventhub.ini
 
 WORKDIR /app
 
